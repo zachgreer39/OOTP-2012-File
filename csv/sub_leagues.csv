@@ -1,0 +1,21 @@
+league_id,sub_league_id,name,abbr,gender,designated_hitter
+100,0,"American League","AL",0,1
+100,1,"National League","NL",0,1
+101,0,"American League","AL",0,1
+101,1,"Pacific League","PL",0,1
+102,0,"International League","IL",0,1
+103,0,"Texas League","TL",0,1
+104,0,"Southern League","SOUL",0,1
+105,0,"Eastern League","EL",0,1
+106,0,"Midwest League","MIDW",0,1
+107,0,"South Atlantic League","SALL",0,1
+108,0,"Florida State League","FLOR",0,1
+109,0,"California League","CALL",0,0
+110,0,"Carolina League","CARL",0,1
+111,0,"Northwest League","NORW",0,1
+112,0,"New York-Pennsylvania League","NYPL",0,1
+113,0,"Gulf Coast League","GULF",0,1
+114,0,"Arizona League","ARIZ",0,1
+115,0,"Pioneer League","PION",0,1
+116,0,"Appalachian League","APPY",0,1
+201,0,"DSL","DSL",0,1
