@@ -1,7 +1,7 @@
 library(tidyverse);
 
 ##point to OOTP IMPORT/EXPORT DIRECTORY
-setwd("~/Desktop/github/OOTP-2012-File");
+setwd("~/Github/OOTP-2012-File");
 
 ootpRead=function(file){
   data.table::fread(paste0("csv/", file))
@@ -253,16 +253,17 @@ players=function(){
   
   ootpRead("players.csv") %>% 
     filter(retired==0 & hidden==0) %>% 
-    left_join(as.data.frame(cbind(position=1:13, 
+    mutate(role=ifelse(role==0, position, role)) %>%
+    left_join(as.data.frame(cbind(role=1:13, 
                                   posDESC=c("P", "C", "1B", "2B", "3B", 
                                             "SS", "LF", "CF", "RF", 
                                             "DH", "SP", "RP", "CL"))) %>% 
-                mutate(position=as.numeric(position), 
+                mutate(role=as.numeric(role), 
                        posDESC=factor(posDESC, 
                                       levels=c("P", "SP", "CL", "RP", "C", 
                                                "1B", "2B", "3B", "SS", 
-                                               "LF", "CF", "RF", "DF"))), 
-              by="position") %>%
+                                               "LF", "CF", "RF", "DH"))), 
+              by="role") %>%
     left_join(df_leagues %>% 
                 select(leagueID, leagueDESC, levelID, levelDESC, 
                        season_year, file_date), 
@@ -297,13 +298,17 @@ players=function(){
                                  ifelse(bats==3, 
                                         "S", 
                                         NA))), 
+              bats=factor(bats, 
+                          levels=c("R", "L", "S")),
               throws=ifelse(throws==1, 
                             "R", 
                             ifelse(throws==2, 
                                    "L", 
-                                   NA)), 
+                                   NA)),
+              throws=factor(throws, 
+                            levels=c("R", "L")),
               date_of_birth=lubridate::ymd(date_of_birth),
-              baseballAGE=floor(as.numeric(difftime(
+              age=floor(as.numeric(difftime(
                 lubridate::ymd(paste0(season_year, "06-30")),
                 date_of_birth))/365.25),
               birthCityID=city_of_birth_id, 
@@ -322,44 +327,33 @@ df_players=players();
 rm(players);
 
 
-batting_stats=function(){
+
+batStats=function(){
   
   ootpRead("players_career_batting_stats.csv") %>% 
-    rename(playerID=player_id, 
-           teamID=team_id, 
-           leagueID=league_id) %>%
-    inner_join(players() %>%
-                 transmute(playerID, 
-                           playerNAME, 
-                           posDESC, 
-                           bats, 
-                           baseballAGE, 
-                           season_year), 
-               by="playerID") %>%
-    left_join(teams() %>%
-                transmute(teamID, 
-                          teamDESC=ifelse(levelID==1, 
-                                          teamDESC, 
-                                          paste(orgDESC, levelDESC, sep=" ")),
-                          leagueID, 
-                          leagueDESC, 
-                          levelID), 
-              by=c("teamID", "leagueID")) %>%
-    transmute(playerID, 
+    inner_join(df_players %>%
+                 select(playerID, playerNAME, posDESC, bats, age, season_year), 
+               by=c("player_id"="playerID")) %>%
+    left_join(df_teams %>% 
+                select(teamID, teamDESC, leagueDESC, levelDESC), 
+              by=c("team_id"="teamID")) %>% 
+    transmute(playerID=player_id, 
               playerNAME,
               year,
-              age=baseballAGE-(season_year-year),
-              teamID,
+              age=age-(season_year-year),
+              teamID=team_id,
               teamDESC,
-              leagueID, 
+              leagueID=league_id, 
               leagueDESC,
-              levelID,
-              split_id=ifelse(split_id==1, 
-                              "FS", 
-                              ifelse(split_id==2, 
-                                     "vL", 
-                                     ifelse(split_id==3, 
-                                            "vR", NA))), 
+              levelDESC,
+              split=ifelse(split_id==1, 
+                           "FS", 
+                           ifelse(split_id==2, 
+                                  "vL", 
+                                  ifelse(split_id==3, 
+                                         "vR", NA))),
+              split=factor(split, 
+                           levels=c("FS", "vR", "vL")),
               bats, 
               g, 
               gs, 
@@ -385,126 +379,18 @@ batting_stats=function(){
               sb, 
               cs,
               pitchesPA=round(pitches_seen/pa, 1),
-              war=round(war, 1)) 
+              war=round(war, 1)) %>% 
+    arrange(playerID, split, desc(year), leagueDESC)
   
 };
-fielding_stats=function(){
-  
-  ootpRead("players_career_fielding_stats.csv") %>% 
-    rename(playerID=player_id, 
-           teamID=team_id, 
-           leagueID=league_id) %>%
-    inner_join(players() %>%
-                 transmute(playerID, 
-                           playerNAME, 
-                           posDESC, 
-                           throws, 
-                           baseballAGE, 
-                           season_year), 
-               by="playerID") %>%
-    left_join(teams() %>%
-                transmute(teamID, 
-                          teamDESC=ifelse(levelID==1, 
-                                          teamDESC, 
-                                          paste(orgDESC, levelDESC, sep=" ")),
-                          leagueID, 
-                          leagueDESC, 
-                          levelID), 
-              by=c("teamID", "leagueID")) %>% 
-    left_join(as.data.frame(cbind(position=1:9, 
-                                  posCODE=c("P", "C", "1B", "2B", "3B", 
-                                            "SS", "LF", "CF", "RF"))) %>% 
-                mutate(position=as.numeric(position)), 
-              by="position") %>%
-    transmute(playerID, 
-              playerNAME,
-              year,
-              age=baseballAGE-(season_year-year),
-              throws, 
-              teamID,
-              teamDESC,
-              leagueID, 
-              leagueDESC,
-              levelID, 
-              posCODE, 
-              g, 
-              gs, 
-              inn=ip, 
-              tc, 
-              po, 
-              a, 
-              e, 
-              dp, 
-              fldPerc=round((tc-e)/tc, 3), 
-              zr=round(zr, 1),
-              pb, 
-              sba, 
-              csPerc=round(rto/sba, 3), 
-              csPerc=ifelse(is.nan(csPerc), 0, csPerc))
-  
-};
+df_batStats=batStats();
+rm(batStats);
 
-
-
-
-
-
-
-
-
-plyrBase=function(){
-  
-  players() %>%
-    mutate(levelDESC=ifelse(is.na(levelDESC), 
-                            "FA", 
-                            levelDESC), 
-           levelDESC=factor(levelDESC, 
-                            levels=c("MLB", "AAA", "AA", "A+", "A", 
-                                     "A-", "Rk", "FRk", "FA")), 
-           posDESC=factor(posDESC, 
-                          levels=c("C", "1B", "2B", "3B", "SS", 
-                                   "LF", "CF", "RF", "DH", "P")),
-           orgID2=ifelse(orgID==0, 999, orgID)) %>%
-    arrange(orgID2, levelDESC, posDESC) %>%
-    transmute(orgDESC, 
-              levelDESC, 
-              posDESC, 
-              playerID,
-              playerNAME, 
-              bats, 
-              throws, 
-              age=baseballAGE)
-  
-}
-
-
-batStats=function(){
-  
-  plyrBase() %>%
-    mutate(orgDESC=factor(orgDESC, 
-                          levels=unique(plyrBase()$orgDESC))) %>%
-    left_join(batting_stats() %>%
-                mutate(split_id=factor(split_id, 
-                                       levels=c("FS", "vR", "vL")), 
-                       leagueDESC=factor(leagueDESC, 
-                                         levels=c("MLB", "PCL", "IL", "TL", 
-                                                  "SOUL", "EL", "FLOR", "CALL", 
-                                                  "CARL", "MIDW", "SALL", "NORW", 
-                                                  "NYPL", "PION", "APPY", "GULF", 
-                                                  "ARIZ", "DSL"))) %>%
-                select(-c("playerNAME", "age", "bats", "teamID", 
-                          "leagueID", "levelID")) %>%
-                arrange(split_id, desc(year), leagueDESC), 
-              by="playerID") %>%
-    mutate(levelDESC=ifelse(is.na(levelDESC), "FA", levelDESC))
-  
-};
 batCareer=function(){
   
-  batStats() %>%
+  df_batStats %>%
     mutate(pitches=round(pitchesPA*pa, 0)) %>%
-    group_by(orgDESC, levelDESC, posDESC, playerID, 
-             playerNAME, bats, throws, age, leagueDESC, split_id) %>%
+    group_by(playerID, playerNAME, levelDESC, split, bats) %>%
     summarise(g=sum(g), 
               gs=sum(gs), 
               pa=sum(pa), 
@@ -529,55 +415,258 @@ batCareer=function(){
               sb=sum(sb), 
               cs=sum(cs), 
               pitchesPA=round(sum(pitches)/sum(pa), 1), 
-              war=sum(war))
+              war=sum(war)) %>%
+    arrange(playerID, levelDESC, split)
   
 };
+df_batCareer=batCareer();
+rm(batCareer);
+batPrev3yr=function(){
+  
+  df_batStats %>%
+    filter(year %in% seq(unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-3, 
+                         unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-1)) %>%
+    mutate(pitches=round(pitchesPA*pa, 0)) %>%
+    group_by(playerID, playerNAME, levelDESC, split, bats) %>%
+    summarise(g=sum(g), 
+              gs=sum(gs), 
+              pa=sum(pa), 
+              ab=sum(ab), 
+              avg=round(sum(h)/sum(ab), 3), 
+              obp=round((sum(h)+sum(bb)+sum(hbp))/(sum(ab)+sum(bb)+sum(hbp)+sum(sf)), 3), 
+              slg=round(((sum(h) - (sum(db) + sum(tr) + sum(hr))) + 2*sum(db) + 3*sum(tr) + 4*sum(hr))/(sum(ab)), 3),
+              ops=obp+slg, 
+              h=sum(h), 
+              db=sum(db), 
+              tr=sum(tr), 
+              hr=sum(hr), 
+              r=sum(r), 
+              rbi=sum(rbi), 
+              k=sum(k), 
+              bb=sum(bb), 
+              ibb=sum(ibb), 
+              hbp=sum(hbp), 
+              sf=sum(sf), 
+              sh=sum(sh), 
+              gdp=sum(gdp), 
+              sb=sum(sb), 
+              cs=sum(cs), 
+              pitchesPA=round(sum(pitches)/sum(pa), 1), 
+              war=sum(war)) %>%
+    arrange(playerID, levelDESC, split)
+  
+};
+batPrev5yr=function(){
+  
+  df_batStats %>%
+    filter(year %in% seq(unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-5, 
+                         unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-1)) %>%
+    mutate(pitches=round(pitchesPA*pa, 0)) %>%
+    group_by(playerID, playerNAME, levelDESC, split, bats) %>%
+    summarise(g=sum(g), 
+              gs=sum(gs), 
+              pa=sum(pa), 
+              ab=sum(ab), 
+              avg=round(sum(h)/sum(ab), 3), 
+              obp=round((sum(h)+sum(bb)+sum(hbp))/(sum(ab)+sum(bb)+sum(hbp)+sum(sf)), 3), 
+              slg=round(((sum(h) - (sum(db) + sum(tr) + sum(hr))) + 2*sum(db) + 3*sum(tr) + 4*sum(hr))/(sum(ab)), 3),
+              ops=obp+slg, 
+              h=sum(h), 
+              db=sum(db), 
+              tr=sum(tr), 
+              hr=sum(hr), 
+              r=sum(r), 
+              rbi=sum(rbi), 
+              k=sum(k), 
+              bb=sum(bb), 
+              ibb=sum(ibb), 
+              hbp=sum(hbp), 
+              sf=sum(sf), 
+              sh=sum(sh), 
+              gdp=sum(gdp), 
+              sb=sum(sb), 
+              cs=sum(cs), 
+              pitchesPA=round(sum(pitches)/sum(pa), 1), 
+              war=sum(war)) %>%
+    arrange(playerID, levelDESC, split)
+  
+};
+
+
+
 fieldStats=function(){
   
-  plyrBase() %>%
-    left_join(fielding_stats() %>%
-                select(-c("playerNAME", "throws", "age")) %>%
-                mutate(leagueDESC=factor(leagueDESC, 
-                                         levels=c("MLB", "PCL", "IL", "TL", 
-                                                  "SOUL", "EL", "FLOR", "CALL", 
-                                                  "CARL", "MIDW", "SALL", "NORW", 
-                                                  "NYPL", "PION", "APPY", "GULF", 
-                                                  "ARIZ", "DSL")), 
+  ootpRead("players_career_fielding_stats.csv") %>% 
+    inner_join(df_players %>%
+                 select(playerID, playerNAME, throws, age, season_year), 
+               by=c("player_id"="playerID")) %>%
+    left_join(df_teams %>%
+                select(teamID, teamDESC, leagueID, leagueDESC, levelDESC), 
+              by=c("team_id"="teamID", "league_id"="leagueID")) %>% 
+    left_join(as.data.frame(cbind(position=1:9, 
+                                  posCODE=c("P", "C", "1B", "2B", "3B", 
+                                            "SS", "LF", "CF", "RF"))) %>% 
+                mutate(position=as.numeric(position), 
                        posCODE=factor(posCODE, 
                                       levels=c("P", "C", "1B", "2B", "3B", 
-                                               "SS", "LF", "CF", "RF"))) %>%
-                arrange(posCODE, desc(year), leagueDESC)) %>%
-    transmute(orgDESC, 
-              levelDESC, 
-              posDESC, 
-              playerID, 
-              playerNAME, 
+                                               "SS", "LF", "CF", "RF"))), 
+              by="position") %>%
+    transmute(playerID=player_id, 
+              playerNAME,
+              year,
+              age=age-(season_year-year),
               throws, 
-              age, 
-              year, 
-              teamID, 
-              teamDESC, 
-              leagueID, 
-              leagueDESC, 
-              levelID, 
+              teamID=team_id,
+              teamDESC,
+              leagueID=league_id, 
+              leagueDESC,
+              levelDESC,
               posCODE, 
               g, 
               gs, 
-              inn, 
+              inn=ip, 
               tc, 
               po, 
               a, 
               e, 
               dp, 
-              fldPerc, 
-              zr, 
+              fldPERC=round((tc-e)/tc, 3), 
+              zr=round(zr, 1),
               pb, 
               sba, 
-              csPerc)
+              csPERC=round(rto/sba, 3), 
+              csPERC=ifelse(is.nan(csPERC), 0, csPERC)) %>%
+    arrange(playerID, desc(year), leagueDESC, posCODE)
   
 };
+df_fieldStats=fieldStats();
+rm(fieldStats);
 
-
+fieldCareer=function(){
+  
+  df_fieldStats %>%
+    mutate(cs=round(csPERC*sba, 0)) %>%
+    group_by(playerID, playerNAME, throws, levelDESC, posCODE) %>%
+    summarise(g=sum(g), 
+              gs=sum(gs), 
+              inn=sum(inn), 
+              tc=sum(tc), 
+              po=sum(po), 
+              a=sum(a), 
+              e=sum(e), 
+              dp=sum(dp), 
+              fldPERC=round((sum(tc)-sum(e))/sum(tc), 3),
+              fldPERC=ifelse(is.nan(fldPERC), 
+                             0, 
+                             fldPERC),
+              zr=sum(zr), 
+              pb=sum(pb), 
+              sba=sum(sba), 
+              csPERC=round(sum(cs)/sum(sba), 2), 
+              csPERC=ifelse(is.nan(csPERC), 
+                            0, 
+                            csPERC)) %>%
+    arrange(playerID, levelDESC, posCODE)
+  
+}
+df_fieldCareer=fieldCareer();
+rm(fieldCareer);
+fieldPrev3yr=function(){
+  
+  df_fieldStats %>%
+    filter(year %in% seq(unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-3, 
+                         unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-1)) %>%
+    mutate(cs=round(csPERC*sba, 0)) %>%
+    group_by(playerID, playerNAME, throws, levelDESC, posCODE) %>%
+    summarise(g=sum(g), 
+              gs=sum(gs), 
+              inn=sum(inn), 
+              tc=sum(tc), 
+              po=sum(po), 
+              a=sum(a), 
+              e=sum(e), 
+              dp=sum(dp), 
+              fldPERC=round((sum(tc)-sum(e))/sum(tc), 3),
+              fldPERC=ifelse(is.nan(fldPERC), 
+                             0, 
+                             fldPERC),
+              zr=sum(zr), 
+              pb=sum(pb), 
+              sba=sum(sba), 
+              csPERC=round(sum(cs)/sum(sba), 2), 
+              csPERC=ifelse(is.nan(csPERC), 
+                            0, 
+                            csPERC)) %>%
+    arrange(playerID, levelDESC, posCODE)
+  
+};
+fieldPrev5yr=function(){
+  
+  df_fieldStats %>%
+    filter(year %in% seq(unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-5, 
+                         unique(df_leagues %>% filter(leagueID==100) %>% 
+                                  pull(season_year))-1)) %>%
+    mutate(cs=round(csPERC*sba, 0)) %>%
+    group_by(playerID, playerNAME, throws, levelDESC, posCODE) %>%
+    summarise(g=sum(g), 
+              gs=sum(gs), 
+              inn=sum(inn), 
+              tc=sum(tc), 
+              po=sum(po), 
+              a=sum(a), 
+              e=sum(e), 
+              dp=sum(dp), 
+              fldPERC=round((sum(tc)-sum(e))/sum(tc), 3),
+              fldPERC=ifelse(is.nan(fldPERC), 
+                             0, 
+                             fldPERC),
+              zr=sum(zr), 
+              pb=sum(pb), 
+              sba=sum(sba), 
+              csPERC=round(sum(cs)/sum(sba), 2), 
+              csPERC=ifelse(is.nan(csPERC), 
+                            0, 
+                            csPERC)) %>%
+    arrange(playerID, levelDESC, posCODE)
+  
+};
+fieldSummary=function(){
+  
+  df_fieldStats %>%
+    rbind(df_fieldCareer %>%
+            mutate(year=1), 
+          fieldPrev3yr() %>%
+            mutate(year=3), 
+          fill=TRUE) %>%
+    arrange(playerID, levelDESC, desc(year), posCODE) %>%
+    mutate(teamDESC=ifelse(year==3, 
+                           "*3 Yr", 
+                           ifelse(year==1, 
+                                  "*Career", 
+                                  as.character(teamDESC))), 
+           teamDESC=factor(teamDESC),
+           leagueDESC=ifelse(year==3, 
+                             "*3 Yr", 
+                             ifelse(year==1, 
+                                    "*Career", 
+                                    as.character(leagueDESC))),
+           leagueDESC=factor(leagueDESC, 
+                             levels=c("MLB", "PCL", "IL", "TL", 
+                                      "SOUL", "EL", "FLOR", "CALL", 
+                                      "CARL", "MIDW", "SALL", "NORW", 
+                                      "NYPL", "PION", "APPY", "GULF", 
+                                      "ARIZ", "DSL", "FA", 
+                                      "*3 Yr", "*Career")),
+           year=ifelse(year %in% 1:3, NA, year))
+  
+};
 
 
 
